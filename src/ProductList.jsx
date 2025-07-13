@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
-// Inline AddProductForm component
 const AddProductForm = ({ onProductAdded }) => {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -9,10 +8,7 @@ const AddProductForm = ({ onProductAdded }) => {
 
   const handleAddProduct = (e) => {
     e.preventDefault();
-
-    if (!name || !price || !quantity) {
-      return alert('Please fill all fields');
-    }
+    if (!name || !price || !quantity) return alert('Please fill all fields');
 
     axios.post('https://pos-backend-m1qe.onrender.com/api/products', {
       name,
@@ -24,48 +20,19 @@ const AddProductForm = ({ onProductAdded }) => {
         setName('');
         setPrice('');
         setQuantity('');
-        onProductAdded(); // Refresh products
+        onProductAdded();
       })
-      .catch(err => {
-        console.error('Add product error:', err);
-        alert('❌ Error adding product');
-      });
+      .catch(() => alert('❌ Error adding product'));
   };
 
   return (
     <div className="card mb-4 p-3">
       <h3>Add Product</h3>
       <form onSubmit={handleAddProduct} className="row g-3">
-        <div className="col-md-4">
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Product Name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-          />
-        </div>
-        <div className="col-md-3">
-          <input
-            type="number"
-            className="form-control"
-            placeholder="Price"
-            value={price}
-            onChange={e => setPrice(e.target.value)}
-          />
-        </div>
-        <div className="col-md-3">
-          <input
-            type="number"
-            className="form-control"
-            placeholder="Quantity"
-            value={quantity}
-            onChange={e => setQuantity(e.target.value)}
-          />
-        </div>
-        <div className="col-md-2">
-          <button type="submit" className="btn btn-success w-100">Add</button>
-        </div>
+        <div className="col-md-4"><input className="form-control" placeholder="Name" value={name} onChange={e => setName(e.target.value)} /></div>
+        <div className="col-md-3"><input type="number" className="form-control" placeholder="Price" value={price} onChange={e => setPrice(e.target.value)} /></div>
+        <div className="col-md-3"><input type="number" className="form-control" placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} /></div>
+        <div className="col-md-2"><button type="submit" className="btn btn-success w-100">Add</button></div>
       </form>
     </div>
   );
@@ -74,16 +41,42 @@ const AddProductForm = ({ onProductAdded }) => {
 const ProductList = () => {
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [paymentMode, setPaymentMode] = useState('cash');
 
   const fetchProducts = () => {
     axios.get('https://pos-backend-m1qe.onrender.com/api/products')
       .then(res => setProducts(res.data))
-      .catch(err => console.error('Error fetching products:', err));
+      .catch(console.error);
   };
 
   useEffect(() => {
     fetchProducts();
   }, []);
+
+  const handleDelete = (id) => {
+    if (!window.confirm('Delete this product?')) return;
+    axios.delete(`https://pos-backend-m1qe.onrender.com/api/products/${id}`)
+      .then(() => fetchProducts())
+      .catch(() => alert('Error deleting'));
+  };
+
+  const handleEdit = (product) => {
+    const newName = prompt('Enter new name', product.name);
+    const newPrice = prompt('Enter new price', product.price);
+    const newQuantity = prompt('Enter new quantity', product.quantity);
+    if (!newName || !newPrice || !newQuantity) return;
+
+    axios.put(`https://pos-backend-m1qe.onrender.com/api/products/${product.id}`, {
+      name: newName,
+      price: parseInt(newPrice),
+      quantity: parseInt(newQuantity)
+    }).then(fetchProducts).catch(() => alert('Error editing product'));
+  };
+
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const addToCart = (product) => {
     const existing = cart.find(item => item.id === product.id);
@@ -99,16 +92,16 @@ const ProductList = () => {
   const handleCheckout = () => {
     if (cart.length === 0) return alert('Cart is empty');
 
-    axios.post('https://pos-backend-m1qe.onrender.com/api/checkout', { cart })
+    axios.post('https://pos-backend-m1qe.onrender.com/api/checkout', {
+      cart,
+      payment_mode: paymentMode
+    })
       .then(() => {
         alert('✅ Checkout complete!');
         setCart([]);
-        fetchProducts(); // Refresh product quantities
+        fetchProducts();
       })
-      .catch(err => {
-        console.error('Checkout error:', err);
-        alert('❌ Checkout failed');
-      });
+      .catch(() => alert('❌ Checkout failed'));
   };
 
   return (
@@ -117,10 +110,27 @@ const ProductList = () => {
 
       <AddProductForm onProductAdded={fetchProducts} />
 
+      <div className="mb-3 d-flex justify-content-between">
+        <input
+          className="form-control me-2"
+          placeholder="Search by product name..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          style={{ maxWidth: '300px' }}
+        />
+        <div className="d-flex align-items-center">
+          <label className="me-2 fw-bold">Payment:</label>
+          <select className="form-select" value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
+            <option value="cash">Cash</option>
+            <option value="mpesa">M-Pesa</option>
+          </select>
+        </div>
+      </div>
+
       <div className="card p-3 mb-4">
         <h3>Available Products</h3>
-        {products.length === 0 ? (
-          <p>No products available.</p>
+        {filteredProducts.length === 0 ? (
+          <p>No products found.</p>
         ) : (
           <div className="table-responsive">
             <table className="table table-striped table-bordered mt-3">
@@ -129,19 +139,22 @@ const ProductList = () => {
                   <th>Name</th>
                   <th>Price (Ksh)</th>
                   <th>Quantity</th>
-                  <th>Add to Cart</th>
+                  <th>Actions</th>
+                  <th>Add</th>
                 </tr>
               </thead>
               <tbody>
-                {products.map(prod => (
-                  <tr key={prod.id}>
+                {filteredProducts.map(prod => (
+                  <tr key={prod.id} className={prod.quantity <= 5 ? 'table-danger' : ''}>
                     <td>{prod.name}</td>
                     <td>{prod.price}</td>
                     <td>{prod.quantity}</td>
                     <td>
-                      <button className="btn btn-primary btn-sm" onClick={() => addToCart(prod)}>
-                        Add
-                      </button>
+                      <button className="btn btn-sm btn-warning me-2" onClick={() => handleEdit(prod)}>Edit</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(prod.id)}>Delete</button>
+                    </td>
+                    <td>
+                      <button className="btn btn-primary btn-sm" onClick={() => addToCart(prod)}>Add</button>
                     </td>
                   </tr>
                 ))}
@@ -165,9 +178,7 @@ const ProductList = () => {
                 </li>
               ))}
             </ul>
-            <h5>Total: Ksh {
-              cart.reduce((total, item) => total + item.price * item.quantity, 0)
-            }</h5>
+            <h5>Total: Ksh {cart.reduce((total, item) => total + item.price * item.quantity, 0)}</h5>
             <button className="btn btn-success mt-2" onClick={handleCheckout}>Checkout</button>
           </>
         )}
